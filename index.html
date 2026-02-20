@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <title>전국 데이터센터 통합 현황판</title>
+    <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=5daisxrhec"></script>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Malgun Gothic', sans-serif; background: #f0f2f5; }
+        #container { display: flex; height: 100vh; }
+        #sidebar { width: 350px; background: #ffffff; border-right: 1px solid #d1d5db; display: flex; flex-direction: column; z-index: 10; }
+        #sidebar-header { padding: 20px; background: #007aff; color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #search-box { padding: 10px 20px; background: #fff; border-bottom: 1px solid #eee; }
+        #search-input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        #dc-list { flex: 1; overflow-y: auto; padding: 10px; }
+        #map { flex: 1; }
+        .dc-item { padding: 12px; border-bottom: 1px solid #f3f4f6; cursor: pointer; border-radius: 6px; margin-bottom: 4px; transition: 0.2s; }
+        .dc-item:hover { background: #eff6ff; border-color: #bfdbfe; }
+        .dc-item b { font-size: 14px; color: #1f2937; display: block; }
+        .dc-item small { color: #6b7280; font-size: 11px; margin-top: 4px; display: block; }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <div id="sidebar">
+        <div id="sidebar-header">
+            <h2 style="margin:0; font-size: 18px;">전국 데이터센터 목록</h2>
+            <p id="counter" style="margin:5px 0 0; font-size: 12px; opacity: 0.9;">데이터를 불러오는 중...</p>
+        </div>
+        <div id="search-box">
+            <input type="text" id="search-input" placeholder="센터명 또는 지역 검색..." onkeyup="filterList()">
+        </div>
+        <div id="dc-list"></div>
+    </div>
+    <div id="map"></div>
+</div>
+
+<script>
+    // 1. 182개 전체 데이터 (LAT, LNG 따옴표 제거 완료)
+    const mapData = [
+        { NAME: "우정정보관리원", LAT: 35.024149, LNG: 126.7954397 },
+        { NAME: "국세청 세종청사", LAT: 36.4852723, LNG: 127.2603775 },
+        { NAME: "항공교통본부 관제동", LAT: 35.8940957, LNG: 128.7030121 },
+        { NAME: "기상청 전산실", LAT: 37.4937888, LNG: 126.9173215 },
+        { NAME: "대검찰청", LAT: 37.4950884, LNG: 127.0082618 },
+    { NAME: "국가기술표준원 전산실", LAT: 36.9146059, LNG: 127.5509345 },
+    { NAME: "통계청 전산실", LAT: 36.3622267, LNG: 127.3849235 },
+    { NAME: "정부청사관리본부 세종청사 중앙동 정보통신실", LAT: 36.5026045, LNG: 127.2646061 },
+    { NAME: "국가정보자원관리원 광주센터", LAT: 35.1113836, LNG: 126.8668408 },
+    { NAME: "국가정보자원관리원 대구센터", LAT: 35.9674017, LNG: 128.7052264 },
+    { NAME: "국가정보자원관리원 대전본원", LAT: 36.398314, LNG: 127.3718883 },
+    { NAME: "하남 버스공용차고지 및 CCTV통합관제센터", LAT: 37.5340562, LNG: 127.2276874 },
+    { NAME: "파주 놀이구름 도시정보센터(전산실)", LAT: 37.7199248, LNG: 126.7553101 },
+    { NAME: "화성 스마트도시 통합운영센터", LAT: 37.1989261, LNG: 126.8290441 },
+    { NAME: "가평 건설도시국 교통과 차량등록팀 전산실", LAT: 37.8313642, LNG: 127.509707 },
+    { NAME: "사천시 CCTV 통합안전센터", LAT: 35.0034737, LNG: 128.0645424 },
+    { NAME: "광주시청 전산실", LAT: 35.1597705, LNG: 126.8515218 },
+    { NAME: "광주 남구청 전산실", LAT: 35.1328667, LNG: 126.9024585 },
+    { NAME: "대구 교통정보운영과 전산실", LAT: 35.8295355, LNG: 128.6340946 },
+    { NAME: "대전 스마트도시통합센터", LAT: 36.3516863, LNG: 127.3440205 },
+    { NAME: "부산시청 데이터센터", LAT: 35.1800626, LNG: 129.0745963 },
+    { NAME: "해운대구청 전산실", LAT: 35.1629739, LNG: 129.1637236 },
+    { NAME: "서울시 상암 데이터센터", LAT: 37.5756374, LNG: 126.890042 },
+    { NAME: "서울시 서초 데이터센터", LAT: 37.4793059, LNG: 127.0211901 },
+    { NAME: "관악구 스마트통합관제센터", LAT: 37.4799878, LNG: 126.9586185 },
+    { NAME: "마포구 IT 운영센터", LAT: 37.566242, LNG: 126.9019425 },
+    { NAME: "인천광역시 IDC", LAT: 37.4558148, LNG: 126.7062842 },
+    { NAME: "연수구청 전산실", LAT: 37.4097888, LNG: 126.6782101 },
+    { NAME: "순천시 종합관제센터", LAT: 34.9502556, LNG: 127.4866254 },
+    { NAME: "충남 통합정보센터", LAT: 36.6586742, LNG: 126.6874687 },
+    { NAME: "천안아산 도시통합운영센터", LAT: 36.7929949, LNG: 127.0986043 },
+    { NAME: "아산시청 청사", LAT: 36.789581, LNG: 127.0024917 },
+    { NAME: "천안아산상생협력센터", LAT: 36.7929949, LNG: 127.0986043 },
+    { NAME: "경기도교육정보기록원 전산실", LAT: 37.2889617, LNG: 127.0547906 },
+    { NAME: "경상북도교육청 정보시스템실", LAT: 36.5791215, LNG: 128.513211 },
+    { NAME: "경상북도교육청연구원 정보시스템실", LAT: 36.5509242, LNG: 128.7186732 },
+    { NAME: "대구교육통합전산센터", LAT: 35.8517503, LNG: 128.5865734 },
+    { NAME: "대전교육정보원 정보시스템실", LAT: 36.3780754, LNG: 127.3714641 },
+    { NAME: "서울특별시교육청 종합전산센터", LAT: 37.5699205, LNG: 126.9674089 },
+    { NAME: "세종특별자치시교육청교육원 교육정보시스템실", LAT: 36.6034181, LNG: 127.2865676 },
+    { NAME: "울산광역시교육정보연구원 전산통합센터", LAT: 35.5393105, LNG: 129.2687518 },
+    { NAME: "인천교육종합정보센터", LAT: 37.4563681, LNG: 126.7031835 },
+    { NAME: "한국도로교통공단 서울지부 7층 서울방송센터", LAT: 37.4658097, LNG: 127.0443526 },
+    { NAME: "한국고용정보원 데이터센터", LAT: 36.9052634, LNG: 127.5505804 },
+    { NAME: "근로복지공단 공단본부", LAT: 35.5638146, LNG: 129.3143434 },
+    { NAME: "근로복지공단 서울남부지사", LAT: 37.5203224, LNG: 126.913225 },
+    { NAME: "기초과학연구원 본원", LAT: 36.3773616, LNG: 127.3843146 },
+    { NAME: "IITP e-Cube센터", LAT: 36.3618968, LNG: 127.353097 },
+    { NAME: "국가과학기술연구회 전산실", LAT: 36.4952842, LNG: 127.3046994 },
+   { NAME: "한국과학기술정보연구원 통합전산실", LAT: 36.3651098, LNG: 127.3592572 },
+    { NAME: "한국한의학연구원 전산실", LAT: 36.3618968, LNG: 127.353097 },
+    { NAME: "한국교육학술정보원 전산실", LAT: 35.8768247, LNG: 128.7358435 },
+    { NAME: "한국장학재단 본사", LAT: 35.8811915, LNG: 128.6127542 },
+    { NAME: "서울대학교 정보화본부", LAT: 37.4533582, LNG: 126.9571625 },
+    { NAME: "한국방송통신대학교 대학본부", LAT: 37.5788204, LNG: 127.0029303 },
+    { NAME: "과학기술정책연구원 전산실", LAT: 36.4952842, LNG: 127.3046994 },
+    { NAME: "한국교육개발원 정보시스템실", LAT: 36.8980168, LNG: 127.5367739 },
+    { NAME: "한국보건사회연구원 전산실", LAT: 36.4952842, LNG: 127.3046994 },
+    { NAME: "경제인문사회연구회 전산실", LAT: 36.4952842, LNG: 127.3046994 },
+    { NAME: "한국국토정보공사 LX데이터마루", LAT: 35.8325093, LNG: 127.0207321 },
+    { NAME: "인천국제공항 ICT센터 통합전산실", LAT: 37.4406367, LNG: 126.4613794 },
+    { NAME: "한국도로공사 데이터센터", LAT: 37.175729, LNG: 127.1184271 },
+    { NAME: "한국철도공사 통합전산센터", LAT: 37.5562878, LNG: 126.9694414 },
+    { NAME: "한국토지주택공사 ICT관제센터", LAT: 35.1781094, LNG: 128.1459474 },
+    { NAME: "한국산업은행 디지털스퀘어", LAT: 37.5740325, LNG: 127.194178 },
+    { NAME: "한국자산관리공사", LAT: 35.1467933, LNG: 129.0657509 },
+    { NAME: "중소기업은행 수지IT센터", LAT: 37.3413354, LNG: 127.1021102 },
+    { NAME: "APEC기후센터", LAT: 35.1739612, LNG: 129.1254425 },
+    { NAME: "한국조폐공사 통합데이터센터", LAT: 36.4156833, LNG: 127.4135291 },
+    { NAME: "국민연금공단 ICT센터", LAT: 35.8374974, LNG: 127.0717359 },
+    { NAME: "국민건강보험공단 데이터센터", LAT: 37.3246097, LNG: 127.986597 },
+    { NAME: "한국사회보장정보원 보건복지 클라우드 센터", LAT: 37.5649376, LNG: 127.0845873 },
+    { NAME: "건강보험심사평가원 ICT센터", LAT: 37.3207302, LNG: 127.9806627 },
+    { NAME: "한국전력공사 전력ICT 대전센터", LAT: 36.3922659, LNG: 127.3910492 },
+    { NAME: "한국전력공사 통합ICT센터", LAT: 35.026293, LNG: 126.7844294 },
+    { NAME: "한국로봇산업진흥원 본관동", LAT: 35.8945885, LNG: 128.5704191 },
+    { NAME: "대한석탄공사 전산실", LAT: 37.3248372, LNG: 127.9774772 },
+    { NAME: "한국가스공사 정보시스템실", LAT: 35.8870961, LNG: 128.7298433 },
+    { NAME: "대한무역투자진흥공사 전산실", LAT: 37.4652142, LNG: 127.0446694 },
+    { NAME: "한국수력원자력 ICT재해복구센터", LAT: 36.4001292, LNG: 127.3654623 },
+    { NAME: "한국수력원자력 메인 데이터센터", LAT: 35.7944483, LNG: 129.39033 },
+    { NAME: "한전KDN 제1전산실", LAT: 35.0222246, LNG: 126.7831104 },
+    { NAME: "한국남부발전", LAT: 35.1467933, LNG: 129.0657509 },
+    { NAME: "한국산업기술진흥원 정보시스템 데이터센터", LAT: 37.5032976, LNG: 127.0436475 },
+    { NAME: "한국소방산업기술원 전산실", LAT: 37.2349056, LNG: 127.1450713 },
+    { NAME: "한국원자력통제기술원 전산실", LAT: 36.3618968, LNG: 127.353097 },
+    { NAME: "공영홈쇼핑 인프라기반시설", LAT: 37.5761672, LNG: 126.8892159 },
+    { NAME: "한국은행 주IT센터", LAT: 37.5077439, LNG: 127.0555343 },
+    { NAME: "부산항만공사 정보시스템실", LAT: 35.1005716, LNG: 129.0381772 },
+    { NAME: "한국지역정보개발원 전산실", LAT: 37.582554, LNG: 126.888013 }, // 공공 90개
+    { NAME: "Actis안양 에포크", LAT: 37.3702288, LNG: 126.9517892 },
+    { NAME: "Actis서울 디토", LAT: 37.5298689, LNG: 126.8938197 },
+    { NAME: "BNK금융그룹 IT센터", LAT: 35.1375401, LNG: 128.8572278 },
+    { NAME: "CJ올리브네트웍스 인천", LAT: 37.3800871, LNG: 126.6423178 },
+    { NAME: "DB Inc 죽전", LAT: 37.3323051, LNG: 127.134359 },
+    { NAME: "DGB금융그룹 대구", LAT: 35.904251, LNG: 128.6378876 },
+    { NAME: "Digital Realty ICN10", LAT: 37.582162, LNG: 126.8861282 },
+    { NAME: "Equinix Hyper. SL2x", LAT: 37.6002521, LNG: 126.8894101 },
+    { NAME: "KB금융그룹 통합IT센터", LAT: 37.6394716, LNG: 126.6830849 },
+    { NAME: "KB금융그룹 여의도 IT센터", LAT: 37.5283603, LNG: 126.9187716 },
+    { NAME: "KINX 도곡센터", LAT: 37.4881202, LNG: 127.0510778 },
+    { NAME: "KINX 과천센터", LAT: 37.432265, LNG: 126.994741 },
+    { NAME: "KT Cloud 목동1", LAT: 37.5287216, LNG: 126.871894 },
+    { NAME: "KT Cloud 목동2", LAT: 37.5307305, LNG: 126.8763911 },
+    { NAME: "KT Cloud 범일", LAT: 35.137324, LNG: 129.062438 },
+    { NAME: "KT Cloud 분평", LAT: 36.6069397, LNG: 127.4854216 },
+    { NAME: "KT Cloud 탄방", LAT: 36.3453781, LNG: 127.3840557 },
+    { NAME: "KT Cloud 백석", LAT: 37.6508325, LNG: 126.7965526 },
+    { NAME: "KT Cloud 강남", LAT: 37.5046469, LNG: 127.0412634 },
+    { NAME: "KT Cloud 용산", LAT: 37.53465, LNG: 126.9588944 },
+    { NAME: "KT Cloud 분당", LAT: 37.4130822, LNG: 127.1246996 },
+    { NAME: "KT Cloud 천안", LAT: 36.7272285, LNG: 127.2415401 },
+    { NAME: "KT Cloud 여의도", LAT: 37.521718, LNG: 126.9190616 },
+    { NAME: "KT Cloud 송정(부산)", LAT: 35.1777895, LNG: 129.1965544 },
+    { NAME: "KT GDH 김해", LAT: 35.2495991, LNG: 128.8634641 },
+    { NAME: "LG CNS 부산", LAT: 35.1381536, LNG: 128.8598809 },
+    { NAME: "LG CNS 하남", LAT: 37.5513226, LNG: 127.1943651 },
+    { NAME: "LG CNS 상암", LAT: 37.5811412, LNG: 126.8868857 },
+    { NAME: "LG CNS 가산", LAT: 37.4821428, LNG: 126.8798551 },
+    { NAME: "LG U+ 평촌메가센터", LAT: 37.3979712, LNG: 126.9643702 },
+    { NAME: "LG U+ 평촌2센터", LAT: 37.3992852, LNG: 126.9674821 },
+    { NAME: "LG U+ 논현", LAT: 37.5110715, LNG: 127.0369916 },
+    { NAME: "LG U+ 가산", LAT: 37.4821428, LNG: 126.8798551 },
+    { NAME: "LG U+ 서초1", LAT: 37.4832974, LNG: 127.0221401 },
+    { NAME: "LG U+ 서초2", LAT: 37.4838108, LNG: 127.0239159 },
+    { NAME: "LG U+ 상암", LAT: 37.5805956, LNG: 126.8878126 },
+    { NAME: "LG U+ 안양", LAT: 37.3865396, LNG: 126.9378973 },
+    { NAME: "MS5673 PUS04", LAT: 35.1201274, LNG: 128.8559729 },
+    { NAME: "MS5673 PUS05", LAT: 35.1214677, LNG: 128.8563524 },
+    { NAME: "NHN클라우드 국가AI데이터센터", LAT: 35.2333153, LNG: 126.8451634 },
+    { NAME: "NHN클라우드 NCC1", LAT: 37.4057681, LNG: 127.1031792 },
+    { NAME: "NH금융그룹 의왕", LAT: 37.3985921, LNG: 126.9884445 },
+    { NAME: "NH금융그룹 안성", LAT: 36.9920544, LNG: 127.1890365 },
+    { NAME: "NICE홀딩스 강동", LAT: 37.5499796, LNG: 127.1763154 },
+    { NAME: "SK Ax 대덕", LAT: 36.3837953, LNG: 127.3979507 },
+    { NAME: "SKB 판교", LAT: 37.4058316, LNG: 127.0981535 },
+    { NAME: "SKB 가산", LAT: 37.4757156, LNG: 126.887866 },
+    { NAME: "SKB 일산", LAT: 37.6642146, LNG: 126.7686856 },
+    { NAME: "SKB 서초", LAT: 37.4934813, LNG: 127.0099384 },
+    { NAME: "SKB 일산2", LAT: 37.6901961, LNG: 126.8286764 },
+    { NAME: "SKB 분당", LAT: 37.3352142, LNG: 127.1105493 },
+    { NAME: "SKB 양주", LAT: 37.8143963, LNG: 126.9907412 },
+    { NAME: "교보DTS 인천", LAT: 37.3817288, LNG: 126.6376709 },
+    { NAME: "네이버클라우드 각 춘천", LAT: 37.8893042, LNG: 127.773768 },
+    { NAME: "네이버클라우드 각 세종", LAT: 36.4847159, LNG: 127.3101178 },
+    { NAME: "농협정보시스템 여의도", LAT: 37.5219838, LNG: 126.930031 },
+    { NAME: "다우기술 마포", LAT: 37.5439937, LNG: 126.9475258 },
+    { NAME: "더존비즈온 춘천", LAT: 37.7566998, LNG: 127.6379175 },
+    { NAME: "두산디지털이노베이션 수지DC", LAT: 37.311441, LNG: 127.0801256 },
+    { NAME: "드림마크원 인천", LAT: 37.4800541, LNG: 126.6799123 },
+    { NAME: "드림마크원 구로", LAT: 37.4858893, LNG: 126.8916385 },
+    { NAME: "디지털엣지코리아 SEL1", LAT: 37.500279, LNG: 127.0339966 },
+    { NAME: "디지털엣지코리아 PUS1", LAT: 35.1749209, LNG: 129.127369 },
+    { NAME: "디지털엣지코리아 SEL2", LAT: 37.5179633, LNG: 126.7109346 },
+    { NAME: "롯데이노베이트 용인3", LAT: 37.3053105, LNG: 127.1393375 },
+    { NAME: "롯데이노베이트 용인4", LAT: 37.3053105, LNG: 127.1393375 },
+    { NAME: "롯데이노베이트 서울", LAT: 37.483607, LNG: 126.8766585 },
+    { NAME: "롯데이노베이트 대전", LAT: 36.394475, LNG: 127.3562044 },
+    { NAME: "삼성SDS 상암", LAT: 37.5829095, LNG: 126.8871836 },
+    { NAME: "삼성SDS 수원", LAT: 37.2574303, LNG: 127.0585588 },
+    { NAME: "삼성SDS 춘천", LAT: 37.8469784, LNG: 127.7013196 },
+    { NAME: "삼성SDS 동탄", LAT: 37.1754, LNG: 127.0997473 },
+    { NAME: "삼성SDS 구미", LAT: 36.1081844, LNG: 128.4139686 },
+    { NAME: "세종네트웍스 분당", LAT: 37.3377484, LNG: 127.1043368 },
+    { NAME: "스마일서브 가산", LAT: 37.4685224, LNG: 126.8845841 },
+    { NAME: "신세계I&C 김포", LAT: 37.6387473, LNG: 126.6807783 },
+    { NAME: "신한은행 용인", LAT: 37.3325804, LNG: 127.1354554 },
+    { NAME: "신한은행 일산", LAT: 37.662542, LNG: 126.7703159 },
+    { NAME: "아시아나IDT 강서", LAT: 37.5453509, LNG: 126.798083 },
+    { NAME: "우리FIS 마포", LAT: 37.5833942, LNG: 126.8859607 },
+    { NAME: "카카오 안산", LAT: 37.2908318, LNG: 126.854309 },
+    { NAME: "코스콤 안양", LAT: 37.372233, LNG: 126.94666 },
+    { NAME: "코스콤 서울", LAT: 37.5230423, LNG: 126.9280221 },
+    { NAME: "포스코DX 포항", LAT: 35.9988223, LNG: 129.3894773 },
+    { NAME: "포스코DX 광양", LAT: 34.9328653, LNG: 127.7361051 },
+    { NAME: "포스코DX 충주", LAT: 37.0006893, LNG: 127.8182881 },
+    { NAME: "하나금융티아이 인천", LAT: 37.5557641, LNG: 126.6282991 },
+    { NAME: "한진정보통신 강서", LAT: 37.5733409, LNG: 126.8055107 },
+    { NAME: "한화시스템 용인", LAT: 37.331069, LNG: 127.1365553 },
+    { NAME: "현대오토에버 광주", LAT: 35.1965471, LNG: 126.7871894 },
+    { NAME: "현대오토에버 파주", LAT: 37.736413, LNG: 126.8310525 },
+    { NAME: "호스트웨이 성남", LAT: 37.4135082, LNG: 127.1244908 }
+
+    ];
+let map;
+    let markers = [];
+    const listEl = document.getElementById('dc-list');
+
+    function initMap() {
+        map = new naver.maps.Map('map', {
+            zoom: 7,
+            center: new naver.maps.LatLng(36.5, 127.5),
+            zoomControl: true
+        });
+
+        const bounds = new naver.maps.LatLngBounds();
+
+        mapData.forEach(function(d, index) {
+            const pos = new naver.maps.LatLng(d.LAT, d.LNG);
+            const marker = new naver.maps.Marker({
+                position: pos,
+                map: map,
+                title: d.NAME
+            });
+            markers.push(marker);
+
+            const item = document.createElement('div');
+            item.className = 'dc-item';
+            item.setAttribute('data-name', d.NAME);
+            item.innerHTML = `<b>${d.NAME}</b><small>${d.LAT}, ${d.LNG}</small>`;
+            item.onclick = function() {
+                map.morph(pos, 15);
+                marker.setAnimation(naver.maps.Animation.BOUNCE);
+                setTimeout(() => { marker.setAnimation(null); }, 1500);
+            };
+            listEl.appendChild(item);
+            bounds.extend(pos);
+        });
+
+        document.getElementById('counter').innerText = `총 ${mapData.length}개 위치 표시 중`;
+        if (!bounds.isEmpty()) map.fitBounds(bounds);
+    }
+
+    function filterList() {
+        const query = document.getElementById('search-input').value.toLowerCase();
+        const items = document.querySelectorAll('.dc-item');
+        let count = 0;
+
+        items.forEach((item, index) => {
+            const name = item.getAttribute('data-name').toLowerCase();
+            if (name.includes(query)) {
+                item.style.display = 'block';
+                markers[index].setMap(map);
+                count++;
+            } else {
+                item.style.display = 'none';
+                markers[index].setMap(null);
+            }
+        });
+        document.getElementById('counter').innerText = `검색 결과: ${count}개`;
+    }
+
+    window.onload = initMap;
+</script>
+</body>
+</html>
