@@ -2,14 +2,12 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8" />
-    <title>데이터센터 (공공/민간) 리스트</title>
+    <title>전국 데이터센터 현황</title>
     <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=5daisxrhec"></script>
     <style>
-        /* 기본 레이아웃 */
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Malgun Gothic', sans-serif; background: #f4f7f9; overflow: hidden; }
         #container { display: flex; height: 100vh; }
         
-        /* 사이드바 최적화 */
         #sidebar { width: 360px; background: #ffffff; border-right: 1px solid #d1d5db; display: flex; flex-direction: column; z-index: 10; }
         #sidebar-header { padding: 15px 20px; background: #1a1a1a; color: #ffffff; }
         #search-box { padding: 8px 15px; background: #fff; border-bottom: 1px solid #eee; }
@@ -38,7 +36,7 @@
 
         #map-stats-container {
             position: absolute; bottom: 20px; right: 20px; z-index: 100;
-            width: 260px; background: rgba(255, 255, 255, 0.98); border-radius: 10px;
+            width: 260px; background: #fff; border-radius: 10px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2); border: 1px solid #ccc; overflow: hidden;
         }
         #stats-header { padding: 10px 15px; background: #222; color: #fff; cursor: pointer; display: flex; justify-content: space-between; font-size: 12px; }
@@ -65,7 +63,7 @@
             <p id="counter" style="margin:5px 0 0; font-size: 12px; opacity: 0.7;">로딩 중...</p>
         </div>
         <div id="search-box">
-            <input type="text" id="search-input" placeholder="센터명, 지역명, 주소 검색..." onkeyup="filterList()">
+            <input type="text" id="search-input" placeholder="센터명, 지역 검색..." onkeyup="filterList()">
         </div>
         <div id="dc-list"></div>
     </div>
@@ -73,9 +71,9 @@
     <div id="map">
         <div id="map-legend">
             <div class="legend-item"><div class="dot" style="background:black;"></div>공공</div>
-            <div class="legend-item"><div class="dot" style="background:gold;"></div>민간(소형)(<10MW)</div>
-            <div class="legend-item"><div class="dot" style="background:#007aff;"></div>민간(중형)(10~40)</div>
-            <div class="legend-item"><div class="dot" style="background:red;"></div>민간(대형)(≥40MW)</div>
+            <div class="legend-item"><div class="dot" style="background:gold;"></div>민간(소형)(10MW미만)</div>
+            <div class="legend-item"><div class="dot" style="background:#007aff;"></div>민간(중형)(10~40MW미만)</div>
+            <div class="legend-item"><div class="dot" style="background:red;"></div>민간(대형)(40MW이상)</div>
         </div>
 
         <div id="map-stats-container">
@@ -303,41 +301,20 @@ let map, markers = [], infoWindow;
             acc[region].total++;
             return acc;
         }, {});
-
         const sorted = Object.keys(stats).sort((a, b) => stats[b].total - stats[a].total);
-
-        let html = `<table class="stats-table">
-                        <thead>
-                            <tr>
-                                <th>지역</th>
-                                <th>공공</th>
-                                <th>민간</th>
-                                <th>합계</th>
-                            </tr>
-                        </thead>
-                        <tbody>`;
-        
+        let html = '<table class="stats-table"><thead><tr><th>지역</th><th>공공</th><th>민간</th><th>합계</th></tr></thead><tbody>';
         sorted.forEach(r => {
             const s = stats[r];
-            html += `<tr>
-                        <td>${r}</td>
-                        <td>${s.public}</td>
-                        <td>${s.private}</td>
-                        <td class="stats-total">${s.total}</td>
-                     </tr>`;
+            html += `<tr><td>${r}</td><td>${s.public}</td><td>${s.private}</td><td class="stats-total">${s.total}</td></tr>`;
         });
-        html += `</tbody></table>`;
-        document.getElementById('stats-table-wrapper').innerHTML = html;
+        document.getElementById('stats-table-wrapper').innerHTML = html + '</tbody></table>';
     }
 
     function initMap() {
         updateStats();
 
         map = new naver.maps.Map('map', {
-            zoom: 8, 
-            center: new naver.maps.LatLng(35.9, 127.7), 
-            zoomControl: true, 
-            zoomControlOptions: { position: naver.maps.Position.RIGHT_CENTER }
+            zoom: 8, center: new naver.maps.LatLng(35.9, 127.7), zoomControl: true, zoomControlOptions: { position: naver.maps.Position.RIGHT_CENTER }
         });
 
         infoWindow = new naver.maps.InfoWindow({
@@ -347,8 +324,25 @@ let map, markers = [], infoWindow;
         const bounds = new naver.maps.LatLngBounds();
         const fragment = document.createDocumentFragment();
 
+        // [추가] 동일 좌표 카운팅을 위한 추적 객체
+        const positionTracker = {};
+
         mapData.forEach((d, index) => {
-            const pos = new naver.maps.LatLng(d.LAT, d.LNG);
+            let lat = parseFloat(d.LAT);
+            let lng = parseFloat(d.LNG);
+            const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+
+            // [핵심] 중복 좌표 처리: 동일 위치면 약간씩 옆으로 밀기
+            if (positionTracker[coordKey]) {
+                const offset = positionTracker[coordKey] * 0.00003; 
+                lat -= offset;
+                lng += offset;
+                positionTracker[coordKey]++;
+            } else {
+                positionTracker[coordKey] = 1;
+            }
+
+            const pos = new naver.maps.LatLng(lat, lng);
             let markerColor = (index < 90) ? "black" : (d.MW < 10 ? "gold" : (d.MW >= 40 ? "red" : "#007aff"));
 
             const marker = new naver.maps.Marker({
@@ -372,17 +366,12 @@ let map, markers = [], infoWindow;
                     <span class="addr-label">${d.ADDR || '주소 미상'}</span>
                 </div>`;
 
-            const showInfo = () => {
+            const moveToDC = () => {
+                map.setZoom(17); // [중요] 중복 마커 분리를 확인하기 위해 더 깊게 확대
+                map.panTo(pos);
+                selectItem(item); 
                 infoWindow.setContent(`<div class="iw-inner"><b>${d.NAME}</b><span class="iw-addr">${d.ADDR || ''}</span><span class="iw-mw">용량: ${d.MW > 0 ? d.MW + ' MW' : '미상'}</span></div>`);
                 infoWindow.open(map, marker);
-            };
-
-            // [수정된 클릭 이벤트] 확대(setZoom)와 부드러운 이동(panTo) 적용
-            const moveToDC = () => {
-                map.setZoom(15);      // 원하는 확대 레벨 (14~16 추천)
-                map.panTo(pos);       // 해당 위치로 부드럽게 이동
-                selectItem(item); 
-                showInfo();
             };
 
             naver.maps.Event.addListener(marker, 'click', moveToDC);
