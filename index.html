@@ -2,14 +2,30 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8" />
-    <title>전국 데이터센터 현황</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>전국 데이터센터 지도</title>
     <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=5daisxrhec"></script>
     <style>
+        /* 기본 레이아웃 */
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Malgun Gothic', sans-serif; background: #f4f7f9; overflow: hidden; }
-        #container { display: flex; height: 100vh; }
+        #container { display: flex; height: 100vh; transition: all 0.3s ease; }
         
-        #sidebar { width: 360px; background: #ffffff; border-right: 1px solid #d1d5db; display: flex; flex-direction: column; z-index: 10; }
-        #sidebar-header { padding: 15px 20px; background: #1a1a1a; color: #ffffff; }
+        /* 사이드바 스타일 및 반응형 애니메이션 */
+        #sidebar { 
+            width: 360px; background: #ffffff; border-right: 1px solid #d1d5db; 
+            display: flex; flex-direction: column; z-index: 100;
+            transition: all 0.3s ease; position: relative;
+        }
+        
+        #sidebar.collapsed { width: 0; transform: translateX(-360px); border-right: none; }
+
+        #sidebar-header { padding: 15px 20px; background: #1a1a1a; color: #ffffff; display: flex; flex-direction: column; justify-content: center; position: relative; }
+        #sidebar-header h2 { margin: 0; font-size: 18px; }
+        
+        /* 카운터 스타일 개선 */
+        #counter { margin-top: 8px; font-size: 11px; color: #bbb; line-height: 1.4; }
+        #counter b { color: #fff; font-size: 12px; }
+
         #search-box { padding: 8px 15px; background: #fff; border-bottom: 1px solid #eee; }
         #search-input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box; }
         
@@ -19,15 +35,33 @@
         .dc-item.active { background: #eef6ff; border: 1px solid #007aff; }
         
         .color-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; margin-right: 12px; flex-shrink: 0; }
-        
         .info-text { display: flex; flex-direction: column; gap: 2px; }
         .info-text b { font-size: 14px; color: #222; display: block; }
         .info-text .mw-label { font-size: 11px; color: #007aff; font-weight: bold; display: block; }
         .info-text .addr-label { font-size: 11px; color: #666; display: block; line-height: 1.4; }
 
+        /* 지도 영역 */
         #map { flex: 1; position: relative; }
+
+        #menu-toggle {
+            position: absolute; top: 15px; left: 15px; z-index: 150;
+            background: #1a1a1a; color: white; border: none; padding: 10px 15px;
+            border-radius: 4px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            display: none; font-size: 13px; font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            #container { flex-direction: column; }
+            #sidebar { width: 100%; height: 45vh; border-right: none; border-bottom: 1px solid #d1d5db; transform: none; }
+            #sidebar.collapsed { height: 0; width: 100%; transform: translateY(-45vh); border-bottom: none; }
+            #map { height: 55vh; }
+            #menu-toggle { display: block; top: auto; bottom: 25px; left: 15px; }
+            #map-stats-container { width: 220px !important; bottom: 15px !important; right: 10px !important; }
+            #map-legend { top: 10px !important; right: 10px !important; font-size: 10px !important; padding: 6px !important; }
+        }
+
         #map-legend {
-            position: absolute; top: 15px; right: 15px; z-index: 100;
+            position: absolute; top: 15px; right: 15px; z-index: 50;
             background: rgba(255, 255, 255, 0.95); padding: 10px; border-radius: 8px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.2); font-size: 11px;
         }
@@ -35,32 +69,34 @@
         .dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 
         #map-stats-container {
-            position: absolute; bottom: 20px; right: 20px; z-index: 100;
+            position: absolute; bottom: 20px; right: 20px; z-index: 50;
             width: 260px; background: #fff; border-radius: 10px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2); border: 1px solid #ccc; overflow: hidden;
         }
         #stats-header { padding: 10px 15px; background: #222; color: #fff; cursor: pointer; display: flex; justify-content: space-between; font-size: 12px; }
         #stats-table-wrapper { max-height: 0; transition: max-height 0.3s; background: #fff; overflow-y: auto; }
-        #stats-table-wrapper.open { max-height: 320px; }
+        #stats-table-wrapper.open { max-height: 200px; }
         
         .stats-table { width: 100%; font-size: 11px; border-collapse: collapse; }
         .stats-table th { background: #f8f9fa; padding: 6px; border-bottom: 1px solid #eee; position: sticky; top: 0; }
         .stats-table td { padding: 5px; border-bottom: 1px solid #f1f1f1; text-align: center; }
         .stats-total { font-weight: bold; color: #007aff; }
 
-        .iw-inner { padding: 12px; width: 230px; box-sizing: border-box; min-height: 85px; }
-        .iw-inner b { display: block; font-size: 14px; margin-bottom: 6px; color: #111; border-bottom: 1px solid #eee; padding-bottom: 4px; }
-        .iw-inner .iw-addr { display: block; font-size: 11px; color: #666; margin-bottom: 4px; }
-        .iw-inner .iw-mw { display: block; font-size: 12px; font-weight: bold; color: #007aff; }
+        .iw-inner { padding: 12px; width: 230px; box-sizing: border-box; }
+        .iw-inner b { display: block; font-size: 14px; margin-bottom: 4px; color: #111; }
+        .iw-inner span { display: block; font-size: 11px; color: #666; }
     </style>
 </head>
 <body>
 
+<button id="menu-toggle" onclick="toggleSidebar()">☰ 센터 리스트 열기</button>
+
 <div id="container">
     <div id="sidebar">
         <div id="sidebar-header">
-            <h2 style="margin:0; font-size: 18px;">공공/민간 데이터센터 현황</h2>
-            <p id="counter" style="margin:5px 0 0; font-size: 12px; opacity: 0.7;">로딩 중...</p>
+            <h2>민간/공공 센터 현황</h2>
+            <div id="counter">데이터 로딩 중...</div>
+            <button onclick="toggleSidebar()" style="position:absolute; right:15px; top:15px; background:none; border:none; color:white; font-size:20px; cursor:pointer;">×</button>
         </div>
         <div id="search-box">
             <input type="text" id="search-input" placeholder="센터명, 지역 검색..." onkeyup="filterList()">
@@ -71,14 +107,14 @@
     <div id="map">
         <div id="map-legend">
             <div class="legend-item"><div class="dot" style="background:black;"></div>공공</div>
-            <div class="legend-item"><div class="dot" style="background:gold;"></div>민간(소형)(10MW미만)</div>
-            <div class="legend-item"><div class="dot" style="background:#007aff;"></div>민간(중형)(10~40MW미만)</div>
-            <div class="legend-item"><div class="dot" style="background:red;"></div>민간(대형)(40MW이상)</div>
+            <div class="legend-item"><div class="dot" style="background:gold;"></div>민간(10MW 미만)</div>
+            <div class="legend-item"><div class="dot" style="background:#007aff;"></div>민간(10~40MW미만)</div>
+            <div class="legend-item"><div class="dot" style="background:red;"></div>민간(40MW이상)</div>
         </div>
 
         <div id="map-stats-container">
             <div id="stats-header" onclick="toggleStats()">
-                <span>📊 지역별 현황 집계</span>
+                <span>📊 지역별 현황</span>
                 <span id="stats-arrow">▲</span>
             </div>
             <div id="stats-table-wrapper"></div>
@@ -277,6 +313,18 @@
 let map, markers = [], infoWindow;
     const listEl = document.getElementById('dc-list');
 
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const toggleBtn = document.getElementById('menu-toggle');
+        sidebar.classList.toggle('collapsed');
+        if (sidebar.classList.contains('collapsed')) {
+            toggleBtn.style.display = 'block';
+        } else {
+            toggleBtn.style.display = 'none';
+        }
+        setTimeout(() => { if(map) map.autoResize(); }, 350);
+    }
+
     function toggleStats() {
         const wrapper = document.getElementById('stats-table-wrapper');
         const arrow = document.getElementById('stats-arrow');
@@ -288,7 +336,7 @@ let map, markers = [], infoWindow;
         const activeItem = document.querySelector('.dc-item.active');
         if (activeItem) activeItem.classList.remove('active');
         item.classList.add('active');
-        item.scrollIntoView({ behavior: 'auto', block: 'start' });
+        item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     function updateStats() {
@@ -317,14 +365,10 @@ let map, markers = [], infoWindow;
             zoom: 8, center: new naver.maps.LatLng(35.9, 127.7), zoomControl: true, zoomControlOptions: { position: naver.maps.Position.RIGHT_CENTER }
         });
 
-        infoWindow = new naver.maps.InfoWindow({
-            backgroundColor: "#fff", borderColor: "#ccc", borderWidth: 1, disableAutoPan: false, maxWidth: 250
-        });
+        infoWindow = new naver.maps.InfoWindow({ backgroundColor: "#fff", borderColor: "#ccc", borderWidth: 1, disableAutoPan: false, maxWidth: 250 });
 
         const bounds = new naver.maps.LatLngBounds();
         const fragment = document.createDocumentFragment();
-
-        // [추가] 동일 좌표 카운팅을 위한 추적 객체
         const positionTracker = {};
 
         mapData.forEach((d, index) => {
@@ -332,7 +376,6 @@ let map, markers = [], infoWindow;
             let lng = parseFloat(d.LNG);
             const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
 
-            // [핵심] 중복 좌표 처리: 동일 위치면 약간씩 옆으로 밀기
             if (positionTracker[coordKey]) {
                 const offset = positionTracker[coordKey] * 0.00003; 
                 lat -= offset;
@@ -346,8 +389,7 @@ let map, markers = [], infoWindow;
             let markerColor = (index < 90) ? "black" : (d.MW < 10 ? "gold" : (d.MW >= 40 ? "red" : "#007aff"));
 
             const marker = new naver.maps.Marker({
-                position: pos,
-                map: map,
+                position: pos, map: map,
                 icon: {
                     content: `<div style="display:flex;flex-direction:column;align-items:center;"><div style="width:14px;height:14px;background-color:${markerColor};border:1.5px solid white;border-radius:50%;box-shadow:0 0 4px rgba(0,0,0,0.2);"></div><div style="width:1.5px;height:4px;background-color:${markerColor};"></div></div>`,
                     anchor: new naver.maps.Point(7, 18)
@@ -367,11 +409,12 @@ let map, markers = [], infoWindow;
                 </div>`;
 
             const moveToDC = () => {
-                map.setZoom(17); // [중요] 중복 마커 분리를 확인하기 위해 더 깊게 확대
+                map.setZoom(17);
                 map.panTo(pos);
                 selectItem(item); 
-                infoWindow.setContent(`<div class="iw-inner"><b>${d.NAME}</b><span class="iw-addr">${d.ADDR || ''}</span><span class="iw-mw">용량: ${d.MW > 0 ? d.MW + ' MW' : '미상'}</span></div>`);
+                infoWindow.setContent(`<div class="iw-inner"><b>${d.NAME}</b><span>${d.ADDR || ''}</span><span style="color:#007aff; font-weight:bold;">용량: ${d.MW > 0 ? d.MW + ' MW' : '미상'}</span></div>`);
                 infoWindow.open(map, marker);
+                if(window.innerWidth <= 768) toggleSidebar();
             };
 
             naver.maps.Event.addListener(marker, 'click', moveToDC);
@@ -382,22 +425,38 @@ let map, markers = [], infoWindow;
         });
 
         listEl.appendChild(fragment);
-        document.getElementById('counter').innerText = `로드 완료: ${mapData.length}개`;
+        
+        // 초기 카운터 표시
+        updateCounter(mapData.length, mapData.filter((_, i) => i < 90).length, mapData.filter((_, i) => i >= 90).length);
+        
         if (!bounds.isEmpty()) map.fitBounds(bounds);
-
         naver.maps.Event.addListener(map, 'click', () => infoWindow.close());
+    }
+
+    // [기능] 카운터 텍스트 업데이트 함수
+    function updateCounter(total, pub, priv) {
+        document.getElementById('counter').innerHTML = `전체: <b>${total}</b> (공공: ${pub} / 민간: ${priv})`;
     }
 
     function filterList() {
         const query = document.getElementById('search-input').value.toLowerCase();
-        let count = 0;
+        let totalCount = 0;
+        let publicCount = 0;
+        let privateCount = 0;
+
         document.querySelectorAll('.dc-item').forEach((item, idx) => {
             const match = item.getAttribute('data-search').includes(query);
             item.style.display = match ? 'flex' : 'none';
             markers[idx].setMap(match ? map : null);
-            if (match) count++;
+            
+            if (match) {
+                totalCount++;
+                if (idx < 90) publicCount++;
+                else privateCount++;
+            }
         });
-        document.getElementById('counter').innerText = `검색 결과: ${count}개`;
+        
+        updateCounter(totalCount, publicCount, privateCount);
     }
 
     window.onload = initMap;
